@@ -61,18 +61,28 @@ jobs:
       - name: Checkout configuration repository
         uses: actions/checkout@v4
 
-      - name: Free disk space on runner
+      - name: Check available disk space
+        id: disk
+        run: |
+          AVAIL_GB="$(df -BG --output=avail "$GITHUB_WORKSPACE" | tail -n 1 | tr -dc '0-9')"
+          echo "avail_gb=${AVAIL_GB}" >> "$GITHUB_OUTPUT"
+          echo "Available disk space: ${AVAIL_GB}G"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Free disk space on runner (only when < 45GB available)
+        if: ${{ fromJSON(steps.disk.outputs.avail_gb) < 45 }}
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
-      - name: Show available disk space
+      - name: Show available disk space after cleanup
+        if: ${{ fromJSON(steps.disk.outputs.avail_gb) < 45 }}
         run: df -h "$GITHUB_WORKSPACE"
 
       - name: Install build dependencies (Ubuntu 24.04)

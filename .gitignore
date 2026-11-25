@@ -27,9 +27,9 @@ PROMPTS.md
 .github/prompts/
 
 # 本地调试或编译产生的目录与产物
-openwrt/
-lede/
-huasifei-source/
+/openwrt/
+/lede/
+/huasifei-source/
 build_dir/
 staging_dir/
 dl/

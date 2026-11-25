@@ -1,0 +1,32 @@
+From: WH3000Pro Build Config
+Subject: [PATCH] cfg80211: adapt wiphy_namespace return type for Linux 6.18.65+
+
+Linux 6.18.65 backported the struct class.namespace callback signature
+change to return const struct ns_common * (upstream commit e3b2cf6e5dba).
+Guard wiphy_namespace() on LINUX_VERSION_IS_GEQ(6,18,65) so backports-6.18.39
+builds cleanly on Linux 6.18.65+ as well as earlier 6.18 kernels.
+
+--- a/net/wireless/sysfs.c
++++ b/net/wireless/sysfs.c
+@@ -154,12 +154,21 @@
+ #define WIPHY_PM_OPS NULL
+ #endif
+ 
++#if LINUX_VERSION_IS_GEQ(6,18,65)
++static const struct ns_common *wiphy_namespace(const struct device *d)
++{
++	struct wiphy *wiphy = container_of(d, struct wiphy, dev);
++
++	return to_ns_common(wiphy_net(wiphy));
++}
++#else
+ static const void *wiphy_namespace(const struct device *d)
+ {
+ 	struct wiphy *wiphy = container_of(d, struct wiphy, dev);
+ 
+ 	return wiphy_net(wiphy);
+ }
++#endif
+ 
+ struct class ieee80211_class = {
+ 	.name = "ieee80211",

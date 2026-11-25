@@ -7,6 +7,8 @@
 # ==============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_SOURCE="${BUILD_SOURCE:-lede}"
 LAN_IP="${LAN_IP:-192.168.1.1}"
 HOSTNAME="${HOSTNAME:-WH3000Pro}"
@@ -15,6 +17,24 @@ KEEP_UPSTREAM_MODEM_JSON="${KEEP_UPSTREAM_MODEM_JSON:-true}"
 
 echo "[diy-part2] 当前编译基线: ${BUILD_SOURCE}"
 echo "[diy-part2] 默认 LAN IP: ${LAN_IP} | 主机名: ${HOSTNAME}"
+
+# ------------------------------------------------------------------------------
+# 0. LEDE 专属：修复 backports-6.18.39 在 Linux 6.18.65+ 下 wiphy_namespace 编译报错
+#    （上游 coolsnowwolf/lede#14310 尚未合入修复时自动注入；上游修复或升版后自动跳过）
+# ------------------------------------------------------------------------------
+if [ "${BUILD_SOURCE}" = "lede" ] && [ -f "package/kernel/mac80211/Makefile" ]; then
+    MAC80211_PATCH_SRC="${REPO_ROOT}/patches/lede/mac80211/503-fix_wiphy_namespace_on_6_18_65.patch"
+    MAC80211_PATCH_DIR="package/kernel/mac80211/patches/build"
+    if [ -f "${MAC80211_PATCH_SRC}" ] && [ -d "${MAC80211_PATCH_DIR}" ] && \
+       grep -Eq '^PKG_VERSION:=6\.18\.39$' package/kernel/mac80211/Makefile; then
+        if grep -Rqs 'wiphy_namespace' package/kernel/mac80211/patches/; then
+            echo "[diy-part2] 上游 mac80211 已包含 wiphy_namespace 补丁，跳过注入"
+        else
+            cp -f "${MAC80211_PATCH_SRC}" "${MAC80211_PATCH_DIR}/"
+            echo "[diy-part2] 已注入 mac80211 Linux 6.18.65+ wiphy_namespace 兼容补丁"
+        fi
+    fi
+fi
 
 # ------------------------------------------------------------------------------
 # 1. huasifei-source 专属：应用仓库自带的 patches/feeds 补丁
