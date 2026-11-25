@@ -168,9 +168,38 @@ jobs:
           "${GITHUB_WORKSPACE}/scripts/diy-part2.sh"
           make defconfig
           if [ "${BUILD_SOURCE}" = lede ]; then
-            for package in qmodem luci-app-qmodem kmod-usb-net-ipheth usbmuxd luci-app-openclash luci-app-mosdns luci-app-passwall; do
-              if ! grep -Fxq "CONFIG_PACKAGE_${package}=y" .config; then
-                echo "所需软件包未选入：${package}" >&2
+            for symbol in \
+              CONFIG_LUCI_LANG_zh_Hans \
+              CONFIG_PACKAGE_qmodem \
+              CONFIG_PACKAGE_luci-app-qmodem \
+              CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_generic-qmi-wwan \
+              CONFIG_PACKAGE_kmod-usb-net-ipheth \
+              CONFIG_PACKAGE_usbmuxd \
+              CONFIG_PACKAGE_luci-app-openclash \
+              CONFIG_PACKAGE_luci-app-mosdns \
+              CONFIG_PACKAGE_luci-app-passwall \
+              CONFIG_PACKAGE_smartdns \
+              CONFIG_PACKAGE_xray-core \
+              CONFIG_PACKAGE_sing-box \
+              CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn; do
+              if ! grep -Fxq "${symbol}=y" .config; then
+                echo "所需配置项未选入：${symbol}" >&2
+                exit 1
+              fi
+            done
+
+            for forbidden in \
+              CONFIG_PACKAGE_luci-app-ssr-plus \
+              CONFIG_PACKAGE_kmod-qmi_wwan_q \
+              CONFIG_PACKAGE_kmod-qmi_wwan_f \
+              CONFIG_PACKAGE_kmod-qmi_wwan_s \
+              CONFIG_PACKAGE_shadowsocks-rust-sslocal \
+              CONFIG_PACKAGE_shadowsocksr-libev-ssr-local \
+              CONFIG_PACKAGE_simple-obfs-client \
+              CONFIG_PACKAGE_v2ray-plugin \
+              CONFIG_PACKAGE_haproxy; do
+              if grep -Fxq "${forbidden}=y" .config; then
+                echo "存在不应选入的软件包：${forbidden}" >&2
                 exit 1
               fi
             done

@@ -41,14 +41,16 @@ fi
 
 # ------------------------------------------------------------------------------
 # 2. 修复 QModem 预设槽位脚本对 huasifei,wh3000-pro* 的兼容（兼容 eMMC 机型名）
+#    同时兼容 QModem v3.x (board.d/03_qmodem) 与旧版 (uci-defaults/99-add-5g-handler)
 # ------------------------------------------------------------------------------
-HANDLER_FILE="feeds/qmodem/application/qmodem/files/etc/uci-defaults/99-add-5g-handler"
-if [ -f "${HANDLER_FILE}" ]; then
-    if grep -q 'huasifei,wh3000-pro)' "${HANDLER_FILE}"; then
-        sed -i 's/huasifei,wh3000-pro)/huasifei,wh3000-pro*)/g' "${HANDLER_FILE}"
-        echo "[diy-part2] 已扩展 ${HANDLER_FILE} 的匹配模式为 huasifei,wh3000-pro*)"
+for handler_file in \
+    "feeds/qmodem/application/qmodem/files/etc/board.d/03_qmodem" \
+    "feeds/qmodem/application/qmodem/files/etc/uci-defaults/99-add-5g-handler"; do
+    if [ -f "${handler_file}" ] && grep -q 'huasifei,wh3000-pro)' "${handler_file}"; then
+        sed -i 's/huasifei,wh3000-pro)/huasifei,wh3000-pro*)/g' "${handler_file}"
+        echo "[diy-part2] 已扩展 ${handler_file} 的匹配模式为 huasifei,wh3000-pro*)"
     fi
-fi
+done
 
 # ------------------------------------------------------------------------------
 # 3. 修改默认 LAN IP 与主机名（兼容 LEDE 新版 luci2 路径与传统 files 路径）
