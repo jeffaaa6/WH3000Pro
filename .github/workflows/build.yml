@@ -1,0 +1,237 @@
+name: Build WH3000 Pro Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "上游编译源码基线"
+        required: true
+        default: "lede"
+        type: choice
+        options:
+          - lede
+          - huasifei
+      lan_ip:
+        description: "固件默认管理口 LAN IP"
+        required: true
+        default: "192.168.1.1"
+        type: string
+      hostname:
+        description: "固件默认主机名"
+        required: true
+        default: "WH3000Pro"
+        type: string
+      ssh_menuconfig:
+        description: "开启 tmate SSH 会话以便交互式运行 make menuconfig"
+        required: false
+        default: false
+        type: boolean
+      upload_release:
+        description: "编译完成后自动创建 GitHub Release"
+        required: false
+        default: true
+        type: boolean
+      enable_dl_cache:
+        description: "启用 dl/ 源码包缓存以加速后续编译"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-wh3000pro-${{ github.event.inputs.source || 'lede' }}
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout configuration repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space on runner
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Show available disk space
+        run: df -h
+
+      - name: Install build dependencies (Ubuntu 24.04)
+        run: |
+          sudo -E apt-get update -y
+          sudo -E apt-get install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler file flex gawk \
+            gcc-multilib g++-multilib genisoimage gettext git gperf haveged help2man \
+            intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev \
+            libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool lld llvm lrzsz msmtp ninja-build \
+            p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools \
+            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            unzip upx-ucl wget xmlto xxd zlib1g-dev zstd
+          sudo -E apt-get autoremove -y --purge
+          sudo -E apt-get clean
+
+      - name: Resolve build source parameters
+        id: meta
+        run: |
+          SOURCE="${{ inputs.source }}"
+          BUILD_DATE="$(date +%Y%m%d)"
+          if [ "${SOURCE}" = "huasifei" ]; then
+            REPO_URL="https://github.com/huasifei-source/huasifei-source.git"
+            REPO_BRANCH="main"
+            CONFIG_FILE="config/wh3000-pro-huasifei.config"
+          else
+            SOURCE="lede"
+            REPO_URL="https://github.com/coolsnowwolf/lede.git"
+            REPO_BRANCH="master"
+            CONFIG_FILE="config/wh3000-pro-lede.config"
+          fi
+          echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
+          echo "repo_url=${REPO_URL}" >> "$GITHUB_OUTPUT"
+          echo "repo_branch=${REPO_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "config_file=${CONFIG_FILE}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=wh3000pro-${SOURCE}-${BUILD_DATE}-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Clone upstream source
+        id: clone
+        run: |
+          git clone --depth=1 --branch "${{ steps.meta.outputs.repo_branch }}" \
+            "${{ steps.meta.outputs.repo_url }}" openwrt
+          COMMIT_SHA="$(git -C openwrt rev-parse --short HEAD)"
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Cloned ${{ steps.meta.outputs.repo_url }} (${{ steps.meta.outputs.repo_branch }} @ ${COMMIT_SHA})"
+
+      - name: Restore dl/ cache
+        if: ${{ inputs.enable_dl_cache }}
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: openwrt-dl-${{ steps.meta.outputs.source }}-${{ hashFiles('config/*.config', 'scripts/*.sh') }}
+          restore-keys: |
+            openwrt-dl-${{ steps.meta.outputs.source }}-
+
+      - name: Run diy-part1.sh (before feeds update)
+        env:
+          BUILD_SOURCE: ${{ steps.meta.outputs.source }}
+        run: |
+          chmod +x scripts/diy-part1.sh
+          cd openwrt
+          "${GITHUB_WORKSPACE}/scripts/diy-part1.sh"
+
+      - name: Update and install feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          ./scripts/feeds install -a -p qmodem || true
+          ./scripts/feeds install -a -p fancontrol || true
+
+      - name: Load custom files, seed config, and run diy-part2.sh
+        env:
+          BUILD_SOURCE: ${{ steps.meta.outputs.source }}
+          LAN_IP: ${{ inputs.lan_ip }}
+          HOSTNAME: ${{ inputs.hostname }}
+        run: |
+          if [ -d "${GITHUB_WORKSPACE}/files" ]; then
+            mkdir -p openwrt/files
+            rsync -a --exclude='README.md' "${GITHUB_WORKSPACE}/files/" openwrt/files/
+          fi
+          cp -f "${GITHUB_WORKSPACE}/${{ steps.meta.outputs.config_file }}" openwrt/.config
+          chmod +x scripts/diy-part2.sh
+          cd openwrt
+          "${GITHUB_WORKSPACE}/scripts/diy-part2.sh"
+          make defconfig
+
+      - name: Optional SSH session via tmate (for make menuconfig)
+        if: ${{ inputs.ssh_menuconfig }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
+      - name: Download source tarballs
+        run: |
+          cd openwrt
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
+          make download -j4
+
+      - name: Compile firmware
+        run: |
+          cd openwrt
+          echo "CPU cores: $(nproc)"
+          make -j"$(nproc)" || make -j1 V=s
+
+      - name: Organize firmware outputs and checksums
+        id: organize
+        run: |
+          OUT_DIR="${GITHUB_WORKSPACE}/release_output"
+          TARGET_DIR="${GITHUB_WORKSPACE}/openwrt/bin/targets/mediatek/filogic"
+          mkdir -p "${OUT_DIR}"
+
+          if [ ! -d "${TARGET_DIR}" ]; then
+            echo "未找到编译输出目录: ${TARGET_DIR}" >&2
+            exit 1
+          fi
+
+          # 复制 WH3000 Pro 固件与元数据文件（不区分大小写匹配）
+          find "${TARGET_DIR}" -maxdepth 1 -type f \( \
+            -iname "*wh3000*" -o -name "sha256sums" -o -name "config.buildinfo" -o -name "profiles.json" \
+          \) -exec cp -v {} "${OUT_DIR}/" \;
+
+          if ! find "${OUT_DIR}" -maxdepth 1 -type f -iname "*wh3000*" | grep -q .; then
+            echo "未在 ${TARGET_DIR} 找到 WH3000 Pro 固件文件" >&2
+            ls -la "${TARGET_DIR}"
+            exit 1
+          fi
+
+          # 导出本次实际完整 .config 与精简 diffconfig 供留档复用
+          cp -f "${GITHUB_WORKSPACE}/openwrt/.config" "${OUT_DIR}/full.config"
+          (cd "${GITHUB_WORKSPACE}/openwrt" && ./scripts/diffconfig.sh > "${OUT_DIR}/seed-diffconfig.config")
+
+          # 生成固件 SHA256 校验文件
+          (cd "${OUT_DIR}" && sha256sum *.bin 2>/dev/null > sha256sums.txt || true)
+          ls -lh "${OUT_DIR}"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WH3000Pro-${{ steps.meta.outputs.source }}-${{ steps.meta.outputs.build_date }}-${{ steps.clone.outputs.commit_sha }}
+          path: release_output/
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.upload_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.release_tag }}
+          name: WH3000 Pro (${{ steps.meta.outputs.source }} / ${{ steps.meta.outputs.build_date }})
+          body: |
+            ## 编译信息
+            - **机型**：Huasifei WH3000 Pro (eMMC / MT7981B Filogic)
+            - **源码基线**：`${{ steps.meta.outputs.repo_url }}` (`${{ steps.meta.outputs.repo_branch }}` @ `${{ steps.clone.outputs.commit_sha }}`)
+            - **配置文件**：`${{ steps.meta.outputs.config_file }}`
+            - **默认管理口 IP**：`${{ inputs.lan_ip }}`
+            - **默认主机名**：`${{ inputs.hostname }}`
+
+            ## 刷机提示
+            - 请认准 `*-squashfs-sysupgrade.bin`（切勿刷错为 `nand` 固件）。
+            - 跨发行版（如从 QWRT / 官方 OpenWrt 切换）务必使用 `sysupgrade -n` 或网页取消勾选「保留配置」。
+          files: |
+            release_output/*
