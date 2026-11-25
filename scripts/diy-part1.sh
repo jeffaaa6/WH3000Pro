@@ -9,6 +9,9 @@ set -euo pipefail
 
 BUILD_SOURCE="${BUILD_SOURCE:-lede}"
 FEEDS_FILE="feeds.conf.default"
+if [ -f feeds.conf ]; then
+    FEEDS_FILE="feeds.conf"
+fi
 
 echo "[diy-part1] 当前编译基线: ${BUILD_SOURCE}"
 
@@ -30,16 +33,39 @@ ensure_feed() {
     fi
 }
 
-# 1. 注入 FUjr/QModem（5G/4G 蜂窝模组管理与拨号套件）
-ensure_feed "qmodem" "src-git qmodem https://github.com/FUjr/QModem.git;main"
+if [ "${BUILD_SOURCE}" = "lede" ]; then
+    # QModem v3.3.0 正式版
+    QMODEM_COMMIT="5cc80e5f9fc218cd50bef9749dc7d0027e8b3072"
 
-# 2. 注入 JiaY-shi/fancontrol（PWM 风扇温控守护与 LuCI 界面）
+    # 按上游说明优先选择 MosDNS、PassWall 的同名包。
+    feed_config=$(mktemp)
+    trap 'rm -f "$feed_config"' EXIT
+    printf '%s\n' \
+        "src-git mosdns https://github.com/sbwml/luci-app-mosdns.git;v5" \
+        "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" \
+        "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" \
+        "src-git openclash https://github.com/vernesong/OpenClash.git;master" \
+        "src-git qmodem https://github.com/FUjr/QModem.git^${QMODEM_COMMIT}" |
+        awk 'NR == FNR { managed[$2] = 1; print; next }
+             $1 ~ /^src-/ && ($2 in managed) { next }
+             { print }' - "${FEEDS_FILE}" > "${feed_config}"
+    cat "${feed_config}" > "${FEEDS_FILE}"
+
+    # v2ray-geodata 的 Makefile 在仓库根目录，按 MosDNS 上游说明放进 package/。
+    geodata_dir="package/wh3000pro/v2ray-geodata"
+    if [ ! -f "${geodata_dir}/Makefile" ]; then
+        mkdir -p "$(dirname "${geodata_dir}")"
+        git clone --depth=1 --branch master https://github.com/sbwml/v2ray-geodata.git "${geodata_dir}"
+    fi
+
+    if [ -n "${GITHUB_ENV:-}" ]; then
+        printf 'WH3000_QMODEM_COMMIT=%s\n' "${QMODEM_COMMIT}" >> "${GITHUB_ENV}"
+    fi
+else
+    ensure_feed "qmodem" "src-git qmodem https://github.com/FUjr/QModem.git;main"
+fi
+
 ensure_feed "fancontrol" "src-git fancontrol https://github.com/JiaY-shi/fancontrol.git"
-
-# ------------------------------------------------------------------------------
-# 可选：后续如需引入其他第三方源，可取消注释并按需添加，例如：
-# ensure_feed "openclash" "src-git openclash https://github.com/vernesong/OpenClash.git;master"
-# ------------------------------------------------------------------------------
 
 echo "[diy-part1] 最终 ${FEEDS_FILE} 内容："
 cat "${FEEDS_FILE}"

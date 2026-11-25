@@ -36,6 +36,11 @@ on:
         required: false
         default: true
         type: boolean
+      prepare_only:
+        description: "仅下载依赖并检查编译前磁盘空间"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -68,7 +73,7 @@ jobs:
           swap-storage: true
 
       - name: Show available disk space
-        run: df -h
+        run: df -h "$GITHUB_WORKSPACE"
 
       - name: Install build dependencies (Ubuntu 24.04)
         run: |
@@ -135,9 +140,14 @@ jobs:
           "${GITHUB_WORKSPACE}/scripts/diy-part1.sh"
 
       - name: Update and install feeds
+        env:
+          BUILD_SOURCE: ${{ steps.meta.outputs.source }}
         run: |
           cd openwrt
           ./scripts/feeds update -a
+          if [ "${BUILD_SOURCE}" = lede ]; then
+            test "$(git -C feeds/qmodem rev-parse HEAD)" = "${WH3000_QMODEM_COMMIT}"
+          fi
           ./scripts/feeds install -a
           ./scripts/feeds install -a -p qmodem || true
           ./scripts/feeds install -a -p fancontrol || true
@@ -157,9 +167,17 @@ jobs:
           cd openwrt
           "${GITHUB_WORKSPACE}/scripts/diy-part2.sh"
           make defconfig
+          if [ "${BUILD_SOURCE}" = lede ]; then
+            for package in qmodem luci-app-qmodem kmod-usb-net-ipheth usbmuxd luci-app-openclash luci-app-mosdns luci-app-passwall; do
+              if ! grep -Fxq "CONFIG_PACKAGE_${package}=y" .config; then
+                echo "所需软件包未选入：${package}" >&2
+                exit 1
+              fi
+            done
+          fi
 
       - name: Optional SSH session via tmate (for make menuconfig)
-        if: ${{ inputs.ssh_menuconfig }}
+        if: ${{ inputs.ssh_menuconfig && ! inputs.prepare_only }}
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: true
@@ -172,13 +190,19 @@ jobs:
           find dl -size -1024c -exec rm -f {} \;
           make download -j4
 
+      - name: Report workspace disk before compilation
+        if: ${{ always() }}
+        run: df -h "$GITHUB_WORKSPACE"
+
       - name: Compile firmware
+        if: ${{ ! inputs.prepare_only }}
         run: |
           cd openwrt
           echo "CPU cores: $(nproc)"
           make -j"$(nproc)" || make -j1 V=s
 
       - name: Organize firmware outputs and checksums
+        if: ${{ ! inputs.prepare_only }}
         id: organize
         run: |
           OUT_DIR="${GITHUB_WORKSPACE}/release_output"
@@ -210,6 +234,7 @@ jobs:
           ls -lh "${OUT_DIR}"
 
       - name: Upload firmware artifact
+        if: ${{ ! inputs.prepare_only }}
         uses: actions/upload-artifact@v4
         with:
           name: WH3000Pro-${{ steps.meta.outputs.source }}-${{ steps.meta.outputs.build_date }}-${{ steps.clone.outputs.commit_sha }}
@@ -217,7 +242,7 @@ jobs:
           retention-days: 14
 
       - name: Publish GitHub Release
-        if: ${{ inputs.upload_release }}
+        if: ${{ inputs.upload_release && ! inputs.prepare_only }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.release_tag }}
