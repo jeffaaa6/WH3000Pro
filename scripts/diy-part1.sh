@@ -34,8 +34,8 @@ ensure_feed() {
 }
 
 if [ "${BUILD_SOURCE}" = "lede" ]; then
-    # QModem v3.3.0 正式版
-    QMODEM_COMMIT="5cc80e5f9fc218cd50bef9749dc7d0027e8b3072"
+    # 锁定个人定制版 QModem (wh3000pro 分支：含 T99W368 漫游门禁/选网/AT单读者/Foxconn锁频修复)
+    QMODEM_COMMIT="04f753f51b63d1c0a589711a900b01f0535e6712"
 
     # 按上游说明优先选择 MosDNS、PassWall 的同名包。
     feed_config=$(mktemp)
@@ -45,7 +45,7 @@ if [ "${BUILD_SOURCE}" = "lede" ]; then
         "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" \
         "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" \
         "src-git openclash https://github.com/vernesong/OpenClash.git;master" \
-        "src-git qmodem https://github.com/FUjr/QModem.git^${QMODEM_COMMIT}" |
+        "src-git qmodem https://github.com/jeffaaa6/QModem.git^${QMODEM_COMMIT}" |
         awk 'NR == FNR { managed[$2] = 1; print; next }
              $1 ~ /^src-/ && ($2 in managed) { next }
              { print }' - "${FEEDS_FILE}" > "${feed_config}"
@@ -62,7 +62,7 @@ if [ "${BUILD_SOURCE}" = "lede" ]; then
         printf 'WH3000_QMODEM_COMMIT=%s\n' "${QMODEM_COMMIT}" >> "${GITHUB_ENV}"
     fi
 else
-    ensure_feed "qmodem" "src-git qmodem https://github.com/FUjr/QModem.git;main"
+    ensure_feed "qmodem" "src-git qmodem https://github.com/jeffaaa6/QModem.git;wh3000pro"
 fi
 
 ensure_feed "fancontrol" "src-git fancontrol https://github.com/JiaY-shi/fancontrol.git"

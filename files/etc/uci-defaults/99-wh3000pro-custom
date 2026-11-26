@@ -45,4 +45,28 @@ if [ -f /etc/config/fancontrol ]; then
     uci commit fancontrol
 fi
 
+# 固定 LuCI 为简体中文，避免浏览器 zh-Hans-CN 匹配失败回退英文
+if [ -f /etc/config/luci ]; then
+    uci set luci.main.lang='zh_cn'
+    uci commit luci
+fi
+
+# 关闭流卸载与 FullCone NAT，避免干扰 USB 5G (wwan0) 与透明代理（实测纯软转发可打满千兆）
+if [ -f /etc/config/firewall ]; then
+    uci set firewall.@defaults[0].flow_offloading='0'
+    uci set firewall.@defaults[0].flow_offloading_hw='0'
+    uci set firewall.@defaults[0].fullcone='0'
+    uci commit firewall
+fi
+
+# 若内核已内置 BBR 拥塞控制，则默认持久化开启
+if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null || \
+   [ -d /etc/sysctl.d ]; then
+    mkdir -p /etc/sysctl.d
+    cat << 'EOF' > /etc/sysctl.d/99-bbr.conf
+net.core.default_qdisc=fq_codel
+net.ipv4.tcp_congestion_control=bbr
+EOF
+fi
+
 exit 0

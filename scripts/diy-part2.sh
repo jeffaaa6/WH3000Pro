@@ -95,9 +95,29 @@ for cfg_gen in "${CONFIG_GEN_CANDIDATES[@]}"; do
 done
 
 # ------------------------------------------------------------------------------
-# 4. 确保复制到源码的自定义 uci-defaults / init.d 脚本具备可执行权限
+# 3.5 LEDE 专属：为 huasifei_wh3000-pro 追加 SUPPORTED_DEVICES += huasifei,wh3000-pro-emmc
+#     避免从华思飞官方固件跨刷回自编译 LEDE 时触发机型名称校验失败
 # ------------------------------------------------------------------------------
-for exec_dir in "files/etc/uci-defaults" "files/etc/init.d"; do
+FILOGIC_MK="target/linux/mediatek/image/filogic.mk"
+if [ "${BUILD_SOURCE}" = "lede" ] && [ -f "${FILOGIC_MK}" ]; then
+    if grep -q '^define Device/huasifei_wh3000-pro$' "${FILOGIC_MK}" && \
+       ! grep -q 'huasifei,wh3000-pro-emmc' "${FILOGIC_MK}"; then
+        awk '
+            /^define Device\/huasifei_wh3000-pro$/ { in_dev = 1 }
+            in_dev && /^endef$/ {
+                print "  SUPPORTED_DEVICES += huasifei,wh3000-pro-emmc"
+                in_dev = 0
+            }
+            { print }
+        ' "${FILOGIC_MK}" > "${FILOGIC_MK}.tmp" && mv "${FILOGIC_MK}.tmp" "${FILOGIC_MK}"
+        echo "[diy-part2] 已为 huasifei_wh3000-pro 追加 SUPPORTED_DEVICES += huasifei,wh3000-pro-emmc"
+    fi
+fi
+
+# ------------------------------------------------------------------------------
+# 4. 确保复制到源码的自定义 uci-defaults / init.d / hotplug 脚本具备可执行权限
+# ------------------------------------------------------------------------------
+for exec_dir in "files/etc/uci-defaults" "files/etc/init.d" "files/etc/hotplug.d/iface"; do
     if [ -d "${exec_dir}" ]; then
         chmod +x "${exec_dir}"/* 2>/dev/null || true
     fi

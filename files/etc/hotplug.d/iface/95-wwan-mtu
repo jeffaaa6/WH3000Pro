@@ -1,0 +1,18 @@
+#!/bin/sh
+# ==============================================================================
+# 95-wwan-mtu
+# 蜂窝接口（wwan*）上线或更新时自动保底 MTU<=1420 与 txqueuelen=100
+# 背景：部分运营商/漫游隧道实际 PMTU 低于 1500（如 1340–1480），默认 MTU=1500
+#       会触发 PMTU 黑洞导致单线程吞吐腰斩与静默丢包。
+# ==============================================================================
+[ "$ACTION" = "ifup" ] || [ "$ACTION" = "ifupdate" ] || exit 0
+
+case "$DEVICE" in
+	wwan*)
+		cur_mtu=$(cat "/sys/class/net/$DEVICE/mtu" 2>/dev/null)
+		if [ -n "$cur_mtu" ] && [ "$cur_mtu" -gt 1420 ]; then
+			ip link set dev "$DEVICE" mtu 1420 2>/dev/null
+		fi
+		ip link set dev "$DEVICE" txqueuelen 100 2>/dev/null
+		;;
+esac
