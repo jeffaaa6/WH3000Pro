@@ -35,7 +35,7 @@ ensure_feed() {
 
 if [ "${BUILD_SOURCE}" = "lede" ]; then
     # 锁定个人定制版 QModem (wh3000pro 分支：含 T99W368 漫游门禁/选网/AT单读者/Foxconn锁频修复)
-    QMODEM_COMMIT="04f753f51b63d1c0a589711a900b01f0535e6712"
+    QMODEM_COMMIT="46934211bc0c12e521b51a03c2c8c5ce69c306b2"
 
     # 按上游说明优先选择 MosDNS、PassWall 的同名包。
     feed_config=$(mktemp)
