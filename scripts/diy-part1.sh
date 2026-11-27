@@ -35,7 +35,7 @@ ensure_feed() {
 
 if [ "${BUILD_SOURCE}" = "lede" ]; then
     # 锁定个人定制版 QModem (wh3000pro 分支：含 T99W368 漫游门禁/选网/Next UI移植/AT单读者/插卡即用自动APN与PDP/动态MTU/中文补译)
-    QMODEM_COMMIT="1f6e3c0e663dda274379599de484ee91676a0c48"
+    QMODEM_COMMIT="7e43bd185c594de38a0e905f443fe12014f9c2ab"
 
     # 按上游说明优先选择 MosDNS、PassWall、Bandix 与定制 QModem 的同名包。
     feed_config=$(mktemp)

@@ -285,6 +285,8 @@ def main() -> int:
             if os.path.isfile(p):
                 cbi_targets.append(os.path.realpath(p))
         for rel in [
+            "feeds/luci/modules/luci-base/ucode/controller/admin/index.uc",
+            "package/feeds/luci/luci-base/ucode/controller/admin/index.uc",
             "feeds/luci/modules/luci-base/root/usr/share/ucode/luci/controller/admin/index.uc",
             "package/feeds/luci/luci-base/root/usr/share/ucode/luci/controller/admin/index.uc",
         ]:
@@ -307,6 +309,14 @@ def main() -> int:
     cbi_targets = list(dict.fromkeys(cbi_targets))
     index_targets = list(dict.fromkeys(index_targets))
     header_targets = list(dict.fromkeys(header_targets))
+
+    if args.source_root:
+        if not cbi_targets:
+            raise RuntimeError("在 --source-root 下未找到 cbi.js，请检查 LuCI 源码路径")
+        if not index_targets:
+            raise RuntimeError("在 --source-root 下未找到 controller/admin/index.uc，请检查 LuCI 源码路径")
+        if not header_targets:
+            raise RuntimeError("在 --source-root 下未找到任何主题 header.ut / head.ut")
 
     for p in cbi_targets:
         status = patch_cbi_js(p)
