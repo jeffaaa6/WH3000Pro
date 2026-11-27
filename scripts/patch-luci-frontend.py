@@ -11,6 +11,7 @@
 
 import argparse
 import glob
+import json
 import os
 import re
 import sys
@@ -258,6 +259,52 @@ def patch_header_ut(path: str) -> str:
     return "skipped"
 
 
+def patch_dockerman_menu(menu_path: str, common_js_path: str) -> str:
+    """将新版 luci-app-dockerman 从「服务 -> Dockerman JS」提升为顶层一级菜单「Docker」（匹配 Argon docker.svg 图标）。"""
+    menu_changed = False
+    with open(menu_path, "r", encoding="utf-8") as f:
+        menu = json.load(f)
+
+    new_menu = {}
+    for k, v in menu.items():
+        nk = k.replace("admin/services/dockerman", "admin/docker") if k.startswith("admin/services/dockerman") else k
+        if nk != k:
+            menu_changed = True
+        if isinstance(v, dict):
+            v = dict(v)
+            action = v.get("action")
+            if isinstance(action, dict) and isinstance(action.get("path"), str) and action["path"].startswith("admin/services/dockerman"):
+                action = dict(action)
+                action["path"] = action["path"].replace("admin/services/dockerman", "admin/docker", 1)
+                v["action"] = action
+                menu_changed = True
+            if nk == "admin/docker":
+                if v.get("title") != "Docker":
+                    v["title"] = "Docker"
+                    menu_changed = True
+                if v.get("order") != 28:
+                    v["order"] = 28
+                    menu_changed = True
+        new_menu[nk] = v
+
+    if menu_changed:
+        with open(menu_path, "w", encoding="utf-8") as f:
+            json.dump(new_menu, f, indent="\t", ensure_ascii=False)
+            f.write("\n")
+
+    js_changed = False
+    if common_js_path and os.path.isfile(common_js_path):
+        with open(common_js_path, "r", encoding="utf-8") as f:
+            js = f.read()
+        if "admin/services/dockerman" in js:
+            js = js.replace("admin/services/dockerman", "admin/docker")
+            with open(common_js_path, "w", encoding="utf-8") as f:
+                f.write(js)
+            js_changed = True
+
+    return "patched" if (menu_changed or js_changed) else "already_patched"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="应用 LuCI 前端防劫持与翻译缓存补丁")
     parser.add_argument("--source-root", help="OpenWrt/LEDE 编译源码根目录")
@@ -327,6 +374,23 @@ def main() -> int:
     for p in header_targets:
         status = patch_header_ut(p)
         print(f"[patch-luci-frontend] header.ut ({status}): {p}")
+
+    # 可选：若存在新版 luci-app-dockerman，自动将其提升为顶层一级菜单 Docker
+    if args.source_root:
+        root = args.source_root
+        dockerman_menus = []
+        for rel in [
+            "feeds/luci/applications/luci-app-dockerman/root/usr/share/luci/menu.d/luci-app-dockerman.json",
+            "package/feeds/luci/luci-app-dockerman/root/usr/share/luci/menu.d/luci-app-dockerman.json",
+        ]:
+            p = os.path.join(root, rel)
+            if os.path.isfile(p):
+                dockerman_menus.append(os.path.realpath(p))
+        for mp in list(dict.fromkeys(dockerman_menus)):
+            app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(mp))))))
+            cjs = os.path.join(app_root, "htdocs/luci-static/resources/dockerman/common.js")
+            status = patch_dockerman_menu(mp, cjs)
+            print(f"[patch-luci-frontend] dockerman menu ({status}): {mp}")
 
     return 0
 
