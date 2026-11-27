@@ -115,6 +115,15 @@ if [ "${BUILD_SOURCE}" = "lede" ] && [ -f "${FILOGIC_MK}" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# 3.6 LuCI 前端加固与翻译缓存提速：
+#     - 保护 cbi.js 全局 window._ 不被浏览器扩展（如 Lodash 注入）覆盖导致菜单变英文与 TypeError
+#     - 为 /cgi-bin/luci/admin/translations/<lang> 增加基于 lmo 指纹的 /tmp 原子缓存与 ETag/Cache-Control
+# ------------------------------------------------------------------------------
+if [ -f "${SCRIPT_DIR}/patch-luci-frontend.py" ]; then
+    python3 "${SCRIPT_DIR}/patch-luci-frontend.py" --source-root .
+fi
+
+# ------------------------------------------------------------------------------
 # 4. 确保复制到源码的自定义 uci-defaults / init.d / hotplug 脚本具备可执行权限
 # ------------------------------------------------------------------------------
 for exec_dir in "files/etc/uci-defaults" "files/etc/init.d" "files/etc/hotplug.d/iface"; do
