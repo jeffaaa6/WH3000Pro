@@ -1,0 +1,143 @@
+#!/bin/sh
+# ==============================================================================
+# 95-usb-tether
+# 手机 USB 网络共享即插即用（支持 iPhone ipheth / Android RNDIS / NCM / ECM）
+# - 严格按 USB 子系统 + 白名单驱动识别，且排除已知 5G/4G 蜂窝模组与板载/虚拟网卡，
+#   避免误抢 5G 模组（T99W368 等）或 LAN/WLAN/Docker 接口。
+# - 插入后自动绑定至 UCI network.usbwan 接口（metric=4，高于 5G 默认 metric=6）并拉起；
+#   拔出后自动 ifdown usbwan，流量无缝切回 5G/有线 WAN。
+# ==============================================================================
+
+[ -n "$ACTION" ] && [ -n "$INTERFACE" ] || exit 0
+
+STATE_FILE="/var/run/usbwan.iface"
+
+# 快速排除板载以太网、回环、桥接、无线、蜂窝及容器/VPN 虚拟网卡
+case "$INTERFACE" in
+    lo|eth0|eth1|br-*|lan*|wan*|wlan*|phy*|wwan*|rmnet*|docker*|veth*|tailscale*|tun*|tap*|utun*|wg*)
+        exit 0
+        ;;
+esac
+
+ensure_usbwan_uci() {
+    local dev="$1"
+    local changed=0
+
+    if ! uci -q get network.usbwan >/dev/null 2>&1; then
+        uci set network.usbwan='interface'
+        uci set network.usbwan.proto='dhcp'
+        uci set network.usbwan.metric='4'
+        uci set network.usbwan.auto='0'
+        uci set network.usbwan.defaultroute='1'
+        changed=1
+    fi
+
+    if [ "$(uci -q get network.usbwan.device)" != "$dev" ]; then
+        uci set network.usbwan.device="$dev"
+        changed=1
+    fi
+
+    if [ "$changed" -eq 1 ]; then
+        uci commit network
+        ubus call network reload >/dev/null 2>&1 || true
+    fi
+
+    # 确保 usbwan 在防火墙 wan 区域内（幂等）
+    local idx=0
+    local zname nets found
+    while zname="$(uci -q get firewall.@zone[$idx].name)"; do
+        if [ "$zname" = "wan" ]; then
+            nets="$(uci -q get firewall.@zone[$idx].network)"
+            found=0
+            for n in $nets; do
+                if [ "$n" = "usbwan" ]; then
+                    found=1
+                    break
+                fi
+            done
+            if [ "$found" -eq 0 ]; then
+                uci add_list firewall.@zone[$idx].network='usbwan'
+                uci commit firewall
+                /etc/init.d/firewall reload >/dev/null 2>&1 || true
+            fi
+            break
+        fi
+        idx=$((idx + 1))
+    done
+}
+
+is_known_cellular_modem() {
+    local devpath="$1"
+    local cur="$devpath"
+    local vid=""
+    local depth=0
+
+    # 向上查找 USB 父设备的 idVendor
+    while [ "$depth" -lt 4 ] && [ -n "$cur" ] && [ "$cur" != "/" ]; do
+        if [ -r "$cur/idVendor" ]; then
+            vid="$(tr 'A-F' 'a-f' < "$cur/idVendor" 2>/dev/null)"
+            break
+        fi
+        cur="$(dirname "$cur")"
+        depth=$((depth + 1))
+    done
+
+    # 排除常见 5G/4G 蜂窝模组厂商 VID（即使未来模组切换至 NCM/ECM/RNDIS 也不误抢）
+    # 0489: Foxconn (T99W368/T99W175), 2c7c: Quectel, 2cb7: Fibocom, 1199: Sierra,
+    # 1e0e: SimCom, 2dee: Meig, 19d2: ZTE Modem, 05c6: Qualcomm Modem
+    case "$vid" in
+        0489|2c7c|2cb7|1199|1e0e|2dee|19d2|05c6)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+case "$ACTION" in
+    add)
+        SYS_NET="/sys/class/net/$INTERFACE"
+        [ -L "$SYS_NET/device/driver" ] || exit 0
+
+        SUBSYS="$(basename "$(readlink -f "$SYS_NET/device/subsystem" 2>/dev/null)" 2>/dev/null)"
+        [ "$SUBSYS" = "usb" ] || exit 0
+
+        DRIVER="$(basename "$(readlink -f "$SYS_NET/device/driver" 2>/dev/null)" 2>/dev/null)"
+        case "$DRIVER" in
+            ipheth|rndis_host|cdc_ncm|cdc_ether)
+                ;;
+            *)
+                exit 0
+                ;;
+        esac
+
+        DEV_REAL="$(readlink -f "$SYS_NET/device" 2>/dev/null)"
+        if [ -n "$DEV_REAL" ] && is_known_cellular_modem "$DEV_REAL"; then
+            logger -t usb-tether "忽略已知蜂窝模组网卡 $INTERFACE (driver=$DRIVER)"
+            exit 0
+        fi
+
+        # 若该接口已被其他非 usbwan 的网络配置显式占用，则不抢管
+        if uci show network 2>/dev/null | grep -E "^network\.[^.]+\.(device|ifname)='$INTERFACE'$" | grep -vq "^network\.usbwan\."; then
+            logger -t usb-tether "接口 $INTERFACE 已被其他 UCI 网络配置占用，跳过 usbwan 自动绑定"
+            exit 0
+        fi
+
+        ensure_usbwan_uci "$INTERFACE"
+        printf '%s\n' "$INTERFACE" > "$STATE_FILE"
+        ifup usbwan >/dev/null 2>&1 &
+        logger -t usb-tether "检测到手机 USB 共享网卡 $INTERFACE (driver=$DRIVER)，已自动绑定并拉起 usbwan"
+        ;;
+
+    remove)
+        CUR_DEV="$(uci -q get network.usbwan.device)"
+        LAST_DEV="$(cat "$STATE_FILE" 2>/dev/null || true)"
+        if [ "$INTERFACE" = "$CUR_DEV" ] || [ "$INTERFACE" = "$LAST_DEV" ]; then
+            ifdown usbwan >/dev/null 2>&1 || true
+            rm -f "$STATE_FILE"
+            logger -t usb-tether "手机 USB 共享网卡 $INTERFACE 已断开，已关闭 usbwan"
+        fi
+        ;;
+esac
+
+exit 0

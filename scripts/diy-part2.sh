@@ -37,6 +37,21 @@ if [ "${BUILD_SOURCE}" = "lede" ] && [ -f "package/kernel/mac80211/Makefile" ]; 
 fi
 
 # ------------------------------------------------------------------------------
+# 0.5 LEDE 专属：当存在自定义上游版 luci-theme-argon (v3.x) 时，清理 LEDE feeds
+#     中自带的旧版 luci-theme-argon / luci-app-argon-config，避免同名包冲突
+# ------------------------------------------------------------------------------
+if [ "${BUILD_SOURCE}" = "lede" ] && [ -f "package/wh3000pro/luci-theme-argon/Makefile" ]; then
+    rm -rf \
+        feeds/luci/themes/luci-theme-argon \
+        package/feeds/luci/luci-theme-argon \
+        feeds/luci/applications/luci-app-argon-config \
+        package/feeds/luci/luci-app-argon-config \
+        tmp/.packageinfo \
+        tmp/.config-package.in
+    echo "[diy-part2] 已清理 LEDE feeds 旧版 Argon 主题与配置包，启用上游最新版 luci-theme-argon"
+fi
+
+# ------------------------------------------------------------------------------
 # 1. huasifei-source 专属：应用仓库自带的 patches/feeds 补丁
 # ------------------------------------------------------------------------------
 if [ "${BUILD_SOURCE}" = "huasifei" ] && [ -d "./patches/feeds" ]; then
@@ -126,7 +141,7 @@ fi
 # ------------------------------------------------------------------------------
 # 4. 确保复制到源码的自定义 uci-defaults / init.d / hotplug 脚本具备可执行权限
 # ------------------------------------------------------------------------------
-for exec_dir in "files/etc/uci-defaults" "files/etc/init.d" "files/etc/hotplug.d/iface"; do
+for exec_dir in "files/etc/uci-defaults" "files/etc/init.d" "files/etc/hotplug.d/iface" "files/etc/hotplug.d/net"; do
     if [ -d "${exec_dir}" ]; then
         chmod +x "${exec_dir}"/* 2>/dev/null || true
     fi

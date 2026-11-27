@@ -161,6 +161,8 @@ jobs:
           ./scripts/feeds install -a
           ./scripts/feeds install -a -p qmodem || true
           ./scripts/feeds install -a -p fancontrol || true
+          ./scripts/feeds install -a -p bandix || true
+          ./scripts/feeds install -a -p luci_bandix || true
 
       - name: Load custom files, seed config, and run diy-part2.sh
         env:
@@ -180,6 +182,9 @@ jobs:
           if [ "${BUILD_SOURCE}" = lede ]; then
             for symbol in \
               CONFIG_LUCI_LANG_zh_Hans \
+              CONFIG_PACKAGE_luci-theme-argon \
+              CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn \
+              CONFIG_PACKAGE_luci-theme-design \
               CONFIG_PACKAGE_qmodem \
               CONFIG_PACKAGE_luci-app-qmodem \
               CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_generic-qmi-wwan \
@@ -188,9 +193,19 @@ jobs:
               CONFIG_PACKAGE_luci-app-openclash \
               CONFIG_PACKAGE_luci-app-mosdns \
               CONFIG_PACKAGE_luci-app-passwall \
-              CONFIG_PACKAGE_smartdns \
               CONFIG_PACKAGE_xray-core \
               CONFIG_PACKAGE_sing-box \
+              CONFIG_PACKAGE_luci-app-dockerman \
+              CONFIG_PACKAGE_luci-app-diskman \
+              CONFIG_PACKAGE_luci-app-ttyd \
+              CONFIG_PACKAGE_luci-app-filemanager \
+              CONFIG_PACKAGE_luci-app-ksmbd \
+              CONFIG_PACKAGE_luci-app-watchcat \
+              CONFIG_PACKAGE_tailscale \
+              CONFIG_PACKAGE_luci-app-tailscale-community \
+              CONFIG_PACKAGE_bandix \
+              CONFIG_PACKAGE_luci-app-bandix \
+              CONFIG_PACKAGE_luci-app-nlbwmon \
               CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn; do
               if ! grep -Fxq "${symbol}=y" .config; then
                 echo "所需配置项未选入：${symbol}" >&2
@@ -200,6 +215,9 @@ jobs:
 
             for forbidden in \
               CONFIG_PACKAGE_luci-app-ssr-plus \
+              CONFIG_PACKAGE_smartdns \
+              CONFIG_PACKAGE_luci-app-vlmcsd \
+              CONFIG_PACKAGE_luci-app-vsftpd \
               CONFIG_PACKAGE_kmod-qmi_wwan_q \
               CONFIG_PACKAGE_kmod-qmi_wwan_f \
               CONFIG_PACKAGE_kmod-qmi_wwan_s \

@@ -293,8 +293,11 @@ def main() -> int:
                 index_targets.append(os.path.realpath(p))
         for pattern in [
             "feeds/luci/themes/*/ucode/template/themes/*/header.ut",
+            "feeds/luci/themes/*/ucode/template/themes/*/head.ut",
             "package/feeds/luci/*/ucode/template/themes/*/header.ut",
+            "package/feeds/luci/*/ucode/template/themes/*/head.ut",
             "package/*/luci-theme-*/ucode/template/themes/*/header.ut",
+            "package/*/luci-theme-*/ucode/template/themes/*/head.ut",
         ]:
             for p in sorted(glob.glob(os.path.join(root, pattern))):
                 if os.path.isfile(p):

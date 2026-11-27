@@ -34,10 +34,10 @@ ensure_feed() {
 }
 
 if [ "${BUILD_SOURCE}" = "lede" ]; then
-    # 锁定个人定制版 QModem (wh3000pro 分支：含 T99W368 漫游门禁/选网/AT单读者/插卡即用自动APN与PDP/动态MTU修复)
-    QMODEM_COMMIT="58f3edf11c6ced199249428e44a675809daba722"
+    # 锁定个人定制版 QModem (wh3000pro 分支：含 T99W368 漫游门禁/选网/AT单读者/插卡即用自动APN与PDP/动态MTU/中文补译)
+    QMODEM_COMMIT="bbc5d699164369a379b6ac25935f1abdd5081980"
 
-    # 按上游说明优先选择 MosDNS、PassWall 的同名包。
+    # 按上游说明优先选择 MosDNS、PassWall、Bandix 与定制 QModem 的同名包。
     feed_config=$(mktemp)
     trap 'rm -f "$feed_config"' EXIT
     printf '%s\n' \
@@ -45,6 +45,8 @@ if [ "${BUILD_SOURCE}" = "lede" ]; then
         "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" \
         "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" \
         "src-git openclash https://github.com/vernesong/OpenClash.git;master" \
+        "src-git bandix https://github.com/timsaya/openwrt-bandix.git;main" \
+        "src-git luci_bandix https://github.com/timsaya/luci-app-bandix.git;main" \
         "src-git qmodem https://github.com/jeffaaa6/QModem.git^${QMODEM_COMMIT}" |
         awk 'NR == FNR { managed[$2] = 1; print; next }
              $1 ~ /^src-/ && ($2 in managed) { next }
@@ -56,6 +58,13 @@ if [ "${BUILD_SOURCE}" = "lede" ]; then
     if [ ! -f "${geodata_dir}/Makefile" ]; then
         mkdir -p "$(dirname "${geodata_dir}")"
         git clone --depth=1 --branch master https://github.com/sbwml/v2ray-geodata.git "${geodata_dir}"
+    fi
+
+    # 上游最新版 jerrykuku/luci-theme-argon (v3.x，已内置主题配置页)，替换 LEDE feeds 中的旧版 Argon
+    argon_dir="package/wh3000pro/luci-theme-argon"
+    if [ ! -f "${argon_dir}/Makefile" ]; then
+        mkdir -p "$(dirname "${argon_dir}")"
+        git clone --depth=1 --branch master https://github.com/jerrykuku/luci-theme-argon.git "${argon_dir}"
     fi
 
     if [ -n "${GITHUB_ENV:-}" ]; then

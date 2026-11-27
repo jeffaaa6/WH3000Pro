@@ -2,7 +2,7 @@
 
 适用于华思飞 WH3000 Pro eMMC 版（MT7981B）。默认用 [LEDE](https://github.com/coolsnowwolf/lede)，也可切换到[华思飞源码](https://github.com/huasifei-source/huasifei-source)。
 
-默认 LEDE 配置包含 QModem v3.3.0（经典界面及短信）、风扇温控、手机 USB 共享、OpenClash、MosDNS 和 PassWall。OpenClash 的核心可在插件页面中安装。
+默认 LEDE 配置包含定制版 QModem 3.4（含 T99W368 漫游门禁、选网、自动 APN/PDP 与动态 MTU、完整中文翻译及短信）、Argon v3（默认）与 Design 双主题、风扇温控、手机 USB 共享即插即用（iPhone / Android）、Docker 与 DiskMan 磁盘管理、TTYD 网页终端、FileManager、Ksmbd、Watchcat、Tailscale（含网页一键更新）、Bandix 实时流量监控与 nlbwmon，以及 OpenClash、MosDNS 和 PassWall。OpenClash 的核心可在插件页面中安装。
 
 ## 编译
 
