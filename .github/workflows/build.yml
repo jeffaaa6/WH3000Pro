@@ -186,8 +186,9 @@ jobs:
               CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn \
               CONFIG_PACKAGE_luci-theme-design \
               CONFIG_PACKAGE_qmodem \
-              CONFIG_PACKAGE_luci-app-qmodem \
-              CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_generic-qmi-wwan \
+              CONFIG_PACKAGE_qmodem_INCLUDE_generic-qmi-wwan \
+              CONFIG_PACKAGE_luci-app-qmodem-next \
+              CONFIG_PACKAGE_luci-i18n-qmodem-next-zh-cn \
               CONFIG_PACKAGE_kmod-usb-net-ipheth \
               CONFIG_PACKAGE_usbmuxd \
               CONFIG_PACKAGE_luci-app-openclash \
@@ -206,6 +207,8 @@ jobs:
               CONFIG_PACKAGE_bandix \
               CONFIG_PACKAGE_luci-app-bandix \
               CONFIG_PACKAGE_luci-app-nlbwmon \
+              CONFIG_PACKAGE_luci-app-wechatpush \
+              CONFIG_PACKAGE_luci-i18n-wechatpush-zh-cn \
               CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn; do
               if ! grep -Fxq "${symbol}=y" .config; then
                 echo "所需配置项未选入：${symbol}" >&2
@@ -214,6 +217,10 @@ jobs:
             done
 
             for forbidden in \
+              CONFIG_PACKAGE_luci-app-qmodem \
+              CONFIG_PACKAGE_luci-app-qmodem-sms \
+              CONFIG_PACKAGE_qmodem-sipd \
+              CONFIG_PACKAGE_wrtbwmon \
               CONFIG_PACKAGE_luci-app-ssr-plus \
               CONFIG_PACKAGE_smartdns \
               CONFIG_PACKAGE_luci-app-vlmcsd \

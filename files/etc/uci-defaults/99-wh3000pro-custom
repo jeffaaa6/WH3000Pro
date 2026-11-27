@@ -45,9 +45,9 @@ if [ -f /etc/config/fancontrol ]; then
     uci commit fancontrol
 fi
 
-# 固定 LuCI 为简体中文，并在安装了 Argon 主题时设为默认主题（保留 Design 供切换）
+# LuCI 语言默认跟随浏览器（auto），并在安装了 Argon 主题时设为默认主题（保留 Design 供切换）
 if [ -f /etc/config/luci ]; then
-    uci set luci.main.lang='zh_cn'
+    uci set luci.main.lang='auto'
     if [ -d /www/luci-static/argon ]; then
         uci set luci.main.mediaurlbase='/luci-static/argon'
     fi
@@ -66,11 +66,15 @@ if [ -f /etc/config/network ] && ! uci -q get network.usbwan >/dev/null 2>&1; th
 fi
 
 # 关闭流卸载与 FullCone NAT，避免干扰 USB 5G (wwan0) 与透明代理（实测纯软转发可打满千兆）
+# 同步配置 TurboACC/firewall 的 tcpcca='bbr' 避免开机后把 BBR 覆盖回 cubic
 # 同时确保 usbwan 加入防火墙 wan 区域（幂等）
 if [ -f /etc/config/firewall ]; then
     uci set firewall.@defaults[0].flow_offloading='0'
     uci set firewall.@defaults[0].flow_offloading_hw='0'
     uci set firewall.@defaults[0].fullcone='0'
+    if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+        uci set firewall.@defaults[0].tcpcca='bbr'
+    fi
 
     idx=0
     while zname="$(uci -q get firewall.@zone[$idx].name)"; do
